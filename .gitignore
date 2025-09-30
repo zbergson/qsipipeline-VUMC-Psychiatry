@@ -1,0 +1,9 @@
+#ignore folders with data
+BIDS/
+custom_atlas/
+freesurfer/
+left_THOMAS/
+right_THOMAS/
+T1w/
+DWI/
+/derivatives
