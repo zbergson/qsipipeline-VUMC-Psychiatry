@@ -149,6 +149,7 @@ def main():
         rows.append({"index": int(idx), "label": label, "source": source})
 
     out_df = pd.DataFrame(rows, columns=["index", "label", "source"])
+    out_df = out_df[out_df.iloc[:, 0] >= 1000]
     args.out_tsv.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(args.out_tsv, sep="\t", index=False)
     print(f"Wrote {len(out_df)} rows -> {args.out_tsv}")

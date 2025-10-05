@@ -25,12 +25,12 @@ def fsrun(fs_home, exe, args):
         raise RuntimeError("SUBJECTS_DIR must be set in the environment.")
     run([fsbin] + list(map(str, args)), env=env)
 
-# -------------------- THOMAS (Fix B) -------------------- #
+# -------------------- THOMAS -------------------- #
 def thomas_to_fs_with_coreg(
     fs_home, fs_t1_mgz, left_dir, right_dir, out_left_mgz, out_right_mgz
 ):
     """
-    Use THOMAS 'ocrop_t1.nii.gz' as moving intensity and apply that LTA to the
+    Use THOMAS 'crop_wmnull.nii.gz' as moving intensity and apply that LTA to the
     left 'thomas.nii.gz' and right 'thomasr.nii.gz' label volumes (nearest).
     """
     # LEFT
@@ -262,8 +262,8 @@ def main():
     p.add_argument("--freesurfer-home", default=os.environ.get("FREESURFER_HOME", "/Applications/freesurfer"))
 
     # THOMAS roots (each has files/ocrop_t1.nii.gz and files/thomas(.nii.gz|r).)
-    p.add_argument("--thomas-left-root", required=True, help="left_THOMAS_T1/resources/left")
-    p.add_argument("--thomas-right-root", required=True, help="right_THOMAS_T1/resources/right")
+    p.add_argument("--thomas-left-root", required=True, help="left_THOMAS/resources/left")
+    p.add_argument("--thomas-right-root", required=True, help="right_THOMAS/resources/right")
 
     p.add_argument("--out-root", required=True, help="Output directory")
     p.add_argument("--keep-hcp-ids", action="store_true", help="Keep HCP IDs; map THOMAS into high ranges")
@@ -289,7 +289,7 @@ def main():
         args.freesurfer_home, args.subjects_dir, args.subject, args.fsaverage_annot_dir, hcp_vol
     )
 
-    # 2) THOMAS → FS via Fix B
+    # 2) THOMAS → FS 
     thomas_left_in_fs  = out_root / "thomas_left_in_FS.mgz"
     thomas_right_in_fs = out_root / "thomas_right_in_FS.mgz"
     thomas_to_fs_with_coreg(

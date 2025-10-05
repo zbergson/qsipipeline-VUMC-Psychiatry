@@ -5,7 +5,7 @@ bidsify_qsiprep.py
 Convert a single-participant dataset organized as:
   SRC_ROOT/
     T1w/   <series folders with DICOMs>
-    DTI/   <series folders with DICOMs>
+    DWI/   <series folders with DICOMs>
     topup/ <series folders with DICOMs>
 into a BIDS-compliant folder suitable for QSIPrep.
 
@@ -17,7 +17,7 @@ Usage:
   python bidsify_qsiprep.py \
       --src /path/to/SRC_ROOT \
       --out /path/to/BIDS_ROOT \
-      --sub sub-256560 \
+      --sub $SUBJ \
       [--map-ap "app|APA"] [--map-pa "apa|APP"] \
       [--dry-run]
 """
@@ -81,8 +81,7 @@ def bidsify(src_root: Path, out_root: Path, sub: str, ap_regex: str, pa_regex: s
     sub_dir = out_root / sub
     dwi_dir = sub_dir / "dwi"
     anat_dir = sub_dir / "anat"
-    fmap_dir = sub_dir / "fmap"
-    ensure_dir(dwi_dir); ensure_dir(anat_dir); ensure_dir(fmap_dir)
+    ensure_dir(dwi_dir); ensure_dir(anat_dir)
 
     # top-level metadata
     ds_desc = {"Name": f"BIDS dataset for {sub}", "BIDSVersion": "1.9.0", "DatasetType": "raw"}
@@ -112,7 +111,7 @@ def bidsify(src_root: Path, out_root: Path, sub: str, ap_regex: str, pa_regex: s
     dwi_relpaths = []
 
     # --- DWI ---
-    dti_root = src_root / "DTI"
+    dti_root = src_root / "DWI"
     if dti_root.exists():
         dti_series = sorted([p for p in dti_root.iterdir() if p.is_dir()])
         run_idx = {}
@@ -149,31 +148,31 @@ def bidsify(src_root: Path, out_root: Path, sub: str, ap_regex: str, pa_regex: s
                 shutil.rmtree(tmp, ignore_errors=True)
 
     # --- Fieldmaps ---
-    fmap_root = src_root / "topup"
-    if fmap_root.exists():
-        fmap_series = sorted([p for p in fmap_root.iterdir() if p.is_dir()])
-        for i, ser in enumerate(fmap_series, 1):
-            tmp = out_root / f"_tmp_fmap_{sanitize(ser.name)}"
-            ensure_dir(tmp)
-            print(f"[info] Converting topup from {ser}")
-            if not dry:
-                run(["dcm2niix", "-ba", "y", "-z", "y", "-o", str(tmp), str(ser)])
-                nii = next(iter(tmp.glob("*.nii.gz")), None)
-                jpath = next(iter(tmp.glob("*.json")), None)
+    # fmap_root = src_root / "topup"
+    # if fmap_root.exists():
+    #     fmap_series = sorted([p for p in fmap_root.iterdir() if p.is_dir()])
+    #     for i, ser in enumerate(fmap_series, 1):
+    #         tmp = out_root / f"_tmp_fmap_{sanitize(ser.name)}"
+    #         ensure_dir(tmp)
+    #         print(f"[info] Converting topup from {ser}")
+    #         if not dry:
+    #             run(["dcm2niix", "-ba", "y", "-z", "y", "-o", str(tmp), str(ser)])
+    #             nii = next(iter(tmp.glob("*.nii.gz")), None)
+    #             jpath = next(iter(tmp.glob("*.json")), None)
 
-                ped = detect_dir_from_json(jpath)
-                dirlbl = sign_to_dir_label(ped, default=None)
-                if dirlbl is None:
-                    dirlbl = detect_dir_from_name(ser.name, ap_regex, pa_regex) or "AP"
+    #             ped = detect_dir_from_json(jpath)
+    #             dirlbl = sign_to_dir_label(ped, default=None)
+    #             if dirlbl is None:
+    #                 dirlbl = detect_dir_from_name(ser.name, ap_regex, pa_regex) or "AP"
 
-                base = f"{sub}_dir-{dirlbl}_run-{i}_epi"
-                shutil.move(str(nii), str(fmap_dir / f"{base}.nii.gz"))
-                j = load_json(jpath)
-                j["IntendedFor"] = dwi_relpaths
-                write_json(fmap_dir / f"{base}.json", j)
-                shutil.rmtree(tmp, ignore_errors=True)
+    #             base = f"{sub}_dir-{dirlbl}_run-{i}_epi"
+    #             shutil.move(str(nii), str(fmap_dir / f"{base}.nii.gz"))
+    #             j = load_json(jpath)
+    #             j["IntendedFor"] = dwi_relpaths
+    #             write_json(fmap_dir / f"{base}.json", j)
+    #             shutil.rmtree(tmp, ignore_errors=True)
 
-    print("[ok] BIDS conversion complete at", sub_dir)
+    # print("[ok] BIDS conversion complete at", sub_dir)
 
 def main():
     ap = argparse.ArgumentParser()

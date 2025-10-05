@@ -58,7 +58,28 @@ def main():
     with open(json_dst, "w") as f:
         json.dump(meta, f, indent=2)
 
+    
+    meta_dataset_description = {
+        "Name": "HCPMMP1 plus THOMAS (custom)",
+        "BIDSVersion": "1.9.0",
+        "DatasetType": "atlas",
+        "GeneratedBy": [
+            {
+                "Name": "Custom HCP+THOMAS build",
+                "Version": "2025-09-11"
+            }
+        ],
+        "HowToAcknowledge": "Please cite Glasser et al., 2016 and THOMAS."
+    }
+    print(args.atlas_root)
+    json_dst_dataset_description = Path(args.atlas_root) / "dataset_description.json"
+    
+    with open(json_dst_dataset_description, "w") as f:
+        json.dump(meta_dataset_description, f, indent=2)
+
     print(f"✅ Packaged atlas under: {atlas_dir}")
+
+    
 
 if __name__ == "__main__":
     main()

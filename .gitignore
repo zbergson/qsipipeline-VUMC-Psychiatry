@@ -6,4 +6,5 @@ left_THOMAS/
 right_THOMAS/
 T1w/
 DWI/
-/derivatives
+derivatives/
+work/

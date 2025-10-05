@@ -2,14 +2,13 @@
 """
 warp_parc_to_acpc_and_mni.py
 
-Runs the exact sequence you’ve been executing manually:
+Runs this sequence:
 
 1) tkregister2    : header-based init FS->ACPC  (DAT + init LTA)
 2) mri_coreg      : intensity-based coreg FS->ACPC (DAT + refined LTA)
 3) mri_vol2vol    : resample stitched parcellation from FS grid -> ACPC (NN)
 4) antsApplyTransforms : ACPC parcellation -> MNI152NLin2009cAsym (NN)
 
-All inputs are paths you already have. Outputs land in --outdir.
 """
 
 import argparse, os, sys, shutil, subprocess
@@ -88,7 +87,6 @@ def main():
     ])
 
     print("\n== Step 2: mri_coreg (intensity coreg FS->ACPC) ==")
-    # Note: modern FreeSurfer uses --ref (not --targ) for mri_coreg
     run([
         mri_coreg,
         "--mov", FS_T1,
