@@ -196,5 +196,3 @@ docker run --rm --platform linux/amd64   -v "${DERIV}":/in:ro   -v "${OUT}":/out
 ```
 
 ---
-
-✅ **Everything is now clearly organized, grammatically correct, and ready to execute as described.**
