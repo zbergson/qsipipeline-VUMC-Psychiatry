@@ -194,6 +194,5 @@ Mount your atlas with `--datasets /atlases` and specify it under `--atlases`.
 ```bash
 docker run --rm --platform linux/amd64   -v "${DERIV}":/in:ro   -v "${OUT}":/out   -v "${WORK}":/work   -v "${FS_DIR}":/fsdir:ro   -v "${ATLAS_ROOT}":/atlases:ro   -v "${FS_LICENSE}":/opt/freesurfer/license.txt:ro   -v "${SPEC_DIR}":/specs:ro   pennlinc/qsirecon:1.0.1     /in /out participant     --input-type qsiprep     --recon-spec /specs/mrtrix_hsvs.yaml     --fs-subjects-dir /fsdir     --fs-license-file /opt/freesurfer/license.txt     --participant-label "${SUBJ}"     --datasets /atlases     --atlases HCPMMP1plusTHOMAS     --output-resolution 2.0     --nprocs 12 --omp-nthreads 12 --mem 32000     -w /work --stop-on-first-crash -v -v
 ```
-
 This will take a significant amount of time to complete if using >1M streamlines. The results will live in `/derivatives/qsirecon`, including exemplar streamlines, the connectomes, and QA figures. 
 ---
