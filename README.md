@@ -2,7 +2,7 @@
 
 ## 🧠 Getting Data Into BIDS Format
 
-To use the **QSIPrep/QSIRecon** pipelines, your data must first be organized in **BIDS format**. Follow the steps below carefully.
+To use the **QSIPrep/QSIRecon** pipelines, your data must first be organized in **BIDS format**.
 
 ---
 
