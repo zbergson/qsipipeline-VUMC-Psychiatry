@@ -96,7 +96,7 @@ Output (under `derivatives/`):
 
 ---
 
-## 🧩 Running a Built-In QSIRecon Pipeline
+##  Running a Built-In QSIRecon Pipeline
 
 If using a built-in atlas (e.g., *4S*, *Brainnetome*), run:
 
@@ -112,11 +112,11 @@ FS_LICENSE=/qsiprep/freesurfer/license.txt
 SPEC_DIR=/qsiprep/qsirecon_specs/(yaml_file)
 ```
 
-If using **MRtrix**, note that the **tckgen() global tractography** step can take a long time (especially >1M streamlines).
+If using **MRtrix**, note that the **tckgen() global tractography** step can take a long time (especially >1M streamlines). Presets for QSIRecon are set in `/qsirecon/yaml_file`. In this yaml file provided here, `mrtrix_hsvs.yaml`, few change have been made to the default options provided by QSIRecon. The options that you will most likely want to play with are `select` and `max_length` in the `track_ifod2` function, and possibly the `search_radius` option in the `tck2connectome` function. 
 
 ---
 
-## 🧬 Running a Custom QSIRecon Pipeline
+## Running a Custom QSIRecon Pipeline
 
 A custom QSIRecon pipeline is needed for custom atlases.
 
