@@ -96,6 +96,8 @@ docker run --rm -it \
          --fs-license-file /opt/freesurfer/license.txt'
 ```
 
+In the above command you can either batch run all of your participants (no need to change anything) or add a `--sub` command to run just one participant
+
 Where:
 - `$SRC_ROOT` = path to your working directory  
 - `$BIDS_ROOT` = path to your BIDS directory  
