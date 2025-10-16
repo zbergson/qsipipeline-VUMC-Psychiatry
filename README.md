@@ -6,7 +6,7 @@ To use the **QSIPrep/QSIRecon** pipelines, your data must first be organized in 
 
 ---
 
-### 1️⃣ T1-weighted DICOM
+### 1️⃣ T1-weighted 
 
 Download the T1-weighted DICOM file from XNAT:
 
@@ -68,7 +68,7 @@ If you plan to make a **custom atlas**:
 
 ---
 
-You should now have all required **XNAT files**. Proceed to **BIDSify your data**:
+You should now have all required **XNAT files**. Proceed to **BIDSify your data** and run **QSIPrep**:
 
 ```bash
 docker run --rm -it \                           
