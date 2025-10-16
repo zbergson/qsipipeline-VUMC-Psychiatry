@@ -105,7 +105,7 @@ Where:
 
 After bidsify_qsiprep.py, your BIDS folder should contain three subdirectories: `dwi`, `anat`, `fmap`.
 
-🕒 Expected runtime for entire qsiprep container: ~16 hours locally.
+🕒 Expected runtime for entire qsiprep container: ~16 hours locally (per participant).
 
 Output (under `derivatives/`):
 - Preprocessed **DWI** and **anat** files
