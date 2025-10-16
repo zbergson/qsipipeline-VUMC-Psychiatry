@@ -11,30 +11,41 @@ To use the **QSIPrep/QSIRecon** pipelines, your data must first be organized in 
 Download the T1-weighted DICOM file from XNAT:
 
 ```
-scans -> 201-cs_T1W_3D_TFE_32_channel -> resources -> DICOM -> files -> name.dcm
+scans -> 201-cs_T1W_3D_TFE_32_channel -> resources -> nifti + json
 ```
 
 Place this file in:
 
 ```
-T1w -> T1_series -> name.dcm
+INPUTS/T1w
 ```
 
 ---
 
-### 2️⃣ DWI Runs (b2000 AP, b1000 AP, b1000 PA)
+### 2️⃣ DWI Runs (b2000 AP, b1000 AP)
 
-Download the three DWI runs from XNAT:
+Download the two DWI runs (b1000 AP, b2000 AP) from XNAT:
 
 ```
-scans -> bX000ap[a/p]_fov140 -> DICOM -> files -> name.dcm
+scans -> bX000app_fov140 -> nifti + json + bval + bvec
 ```
 
-Then place each DICOM in the corresponding folder provided in this repo:
+Then place each in the INPUTS/dwi folder:
 
 - `dwi_b1000_AP`
-- `dwi_b1000_PA`
 - `dwi_b2000_AP`
+
+Download the b1000 PA from XNAT:
+
+```
+scans -> bX000apa_fov140 -> nifti + json + bval + bvec
+```
+
+Then place each in the corresponding folder provided in this repo:
+
+- `dwi_b1000_PA`
+
+Then place each in the INPUTS/fmap folder
 
 ---
 
@@ -60,33 +71,39 @@ If you plan to make a **custom atlas**:
 You should now have all required **XNAT files**. Proceed to **BIDSify your data**:
 
 ```bash
-python3 $SRC_ROOT/bidsify/bidsify_qsiprep.py   --src $SRC_ROOT   --out $BIDS_ROOT   --sub $SUBJ
+docker run --rm -it \                           
+  --platform linux/amd64 \
+  -v "${INPUTS}":/inputs:ro \
+  -v "${BIDS}":/bids \
+  -v "${DERIV}":/out \
+  -v "${WORK}":/work \
+  -v "${FS_LICENSE}":/opt/freesurfer/license.txt:ro \
+  -v "$(dirname "${BIDSIFY}")":/scripts:ro \
+  --entrypoint /bin/bash \
+  pennlinc/qsiprep:1.0.1 \
+  -lc 'set -euxo pipefail; \
+       python /scripts/'"$(basename "${BIDSIFY}")"' \
+         --inputs-root /inputs \
+         --bids-root /bids && \
+       qsiprep /bids /out participant \
+         --stop-on-first-crash \
+         --output-resolution 2 \
+         --nprocs 12 \
+         --write-graph \
+         --omp-nthreads 12 \
+         --mem 32000 \
+         -w /work \
+         --fs-license-file /opt/freesurfer/license.txt'
 ```
 
 Where:
 - `$SRC_ROOT` = path to your working directory  
 - `$BIDS_ROOT` = path to your BIDS directory  
-- `$SUBJ` = participant ID from XNAT (e.g., `sub-123456`)
+- `$BIDSIFY` = src/bidsify/bidsify_qsiprep.py
 
-After completion, your BIDS folder should contain two subdirectories: `dwi` and `anat`.
+After bidsify_qsiprep.py, your BIDS folder should contain three subdirectories: `dwi`, `anat`, `fmap`.
 
-Then clean up and label the b1000 PA files as `_sbref`:
-
-```bash
-python3 $SRC_ROOT/bidsify/fix_dwi_sidecars_and_sbref.py   --bids-root $BIDS_ROOT   --sub $SUBJ
-```
-
----
-
-## ⚡ Running QSIPrep
-
-Once the BIDS folder is ready, run **QSIPrep**. Example (for local Docker run):
-
-```bash
-python3 "$SRC_ROOT/run_qsiprep/qsiprep_only.py"   --bids "$BIDS"   --deriv "$DERIV"   --work "$WORK"   --participant $SUBJ   --threads 12 --mem-mb 32000
-```
-
-🕒 Expected runtime: 8–12 hours locally.
+🕒 Expected runtime for entire qsiprep container: ~16 hours locally.
 
 Output (under `derivatives/`):
 - Preprocessed **DWI** and **anat** files

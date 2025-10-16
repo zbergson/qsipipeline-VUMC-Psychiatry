@@ -268,3 +268,28 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+#Command to run QSIPrep container in docker:
+# docker run --rm -it \                           
+#   --platform linux/amd64 \
+#   -v "${INPUTS}":/inputs:ro \
+#   -v "${BIDS}":/bids \
+#   -v "${DERIV}":/out \
+#   -v "${WORK}":/work \
+#   -v "${FS_LICENSE}":/opt/freesurfer/license.txt:ro \
+#   -v "$(dirname "${BIDSIFY}")":/scripts:ro \
+#   --entrypoint /bin/bash \
+#   pennlinc/qsiprep:1.0.1 \
+#   -lc 'set -euxo pipefail; \
+#        python /scripts/'"$(basename "${BIDSIFY}")"' \
+#          --inputs-root /inputs \
+#          --bids-root /bids && \
+#        qsiprep /bids /out participant \
+#          --stop-on-first-crash \
+#          --output-resolution 2 \
+#          --nprocs 12 \
+#          --write-graph \
+#          --omp-nthreads 12 \
+#          --mem 32000 \
+#          -w /work \
+#          --fs-license-file /opt/freesurfer/license.txt'
