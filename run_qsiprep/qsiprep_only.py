@@ -11,7 +11,7 @@ def main():
     ap.add_argument("--bids", required=True)
     ap.add_argument("--deriv", required=True)
     ap.add_argument("--work", required=True)
-#    ap.add_argument("--fs-license", required=True)
+    ap.add_argument("--fs-license", required=True)
     ap.add_argument("--participant", default=None)
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--mem-mb", type=int, default=24000)
@@ -21,7 +21,7 @@ def main():
     bids   = str(Path(args.bids).resolve())
     deriv  = str(Path(args.deriv).resolve())
     work   = str(Path(args.work).resolve())
-#    fs_lic = str(Path(args.fs_license).resolve())
+    fs_lic = str(Path(args.fs_license).resolve())
 
     # if not os.path.isfile(fs_lic):
     #     print(f"ERROR: FreeSurfer license not found at: {fs_lic}")
@@ -33,16 +33,16 @@ def main():
     "-v", f"{bids}:/data:ro",
     "-v", f"{deriv}:/out",
     "-v", f"{work}:/work",
+    "-v", f"{fs_lic}:/opt/freesurfer/license.txt:ro",
     "pennlinc/qsiprep:1.0.1",
     "/data","/out","participant",
-    "--dwi-only",
-    "--ignore", "fieldmaps",
     "--stop-on-first-crash",
     "--output-resolution","2",
-    "--nprocs", str(args.threads),
+    "--nprocs", "12",
+    "--write-graph",
     "--omp-nthreads", str(args.threads),
     "--mem", str(args.mem_mb),
-    "-w","/work","-v","-v",
+    "-w","/work"
     ]
     if args.participant:
         cmd += ["--participant-label", args.participant]

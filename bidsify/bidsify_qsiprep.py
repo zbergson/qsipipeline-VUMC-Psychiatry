@@ -1,189 +1,171 @@
 #!/usr/bin/env python3
-"""
-bidsify_qsiprep.py
-------------------
-Convert a single-participant dataset organized as:
-  SRC_ROOT/
-    T1w/   <series folders with DICOMs>
-    DWI/   <series folders with DICOMs>
-    topup/ <series folders with DICOMs>
-into a BIDS-compliant folder suitable for QSIPrep.
-
-Requirements:
-- Python 3.8+
-- dcm2niix on PATH (https://github.com/rordenlab/dcm2niix)
-
-Usage:
-  python bidsify_qsiprep.py \
-      --src /path/to/SRC_ROOT \
-      --out /path/to/BIDS_ROOT \
-      --sub $SUBJ \
-      [--map-ap "app|APA"] [--map-pa "apa|APP"] \
-      [--dry-run]
-"""
-
 import argparse
+import json
+import re
+import shutil
 from pathlib import Path
-import json, subprocess, shutil, re
 
-def run(cmd):
-    print("[cmd]", " ".join(map(str, cmd)))
-    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    if r.returncode != 0:
-        print(r.stdout)
-        raise SystemExit(f"Command failed: {' '.join(map(str, cmd))}")
-    return r.stdout
+# ------------------------------------------------------------
+# Phase Encoding inference mapping
+# ------------------------------------------------------------
+PED_MAP = {
+    "AP": "j-",
+    "PA": "j",
+    "LR": "i",
+    "RL": "i-",
+    "SI": "k-",
+    "IS": "k",
+}
+DIR_TOKEN_RE = re.compile(r"(?:^|[_-])dir-([A-Za-z]{2})(?:[_-]|$)")
 
-def ensure_dir(p: Path):
-    p.mkdir(parents=True, exist_ok=True)
+def infer_phase_encoding_from_name(p: Path) -> str | None:
+    m = DIR_TOKEN_RE.search(p.name)
+    if not m:
+        return None
+    return PED_MAP.get(m.group(1).upper())
 
-def load_json(p: Path):
-    with open(p, 'r') as f:
+# ------------------------------------------------------------
+# Utility functions
+# ------------------------------------------------------------
+def ensure_dir(d: Path):
+    d.mkdir(parents=True, exist_ok=True)
+
+def copy_file(src: Path, dst: Path, overwrite: bool):
+    if dst.exists() and not overwrite:
+        return
+    if dst.exists():
+        dst.unlink()
+    shutil.copy2(src, dst)
+
+def load_json(p: Path) -> dict:
+    with p.open("r") as f:
         return json.load(f)
 
-def write_json(p: Path, obj):
-    with open(p, 'w') as f:
-        json.dump(obj, f, indent=2)
+def save_json(p: Path, obj: dict):
+    with p.open("w") as f:
+        json.dump(obj, f, indent=2, sort_keys=True)
+        f.write("\n")
 
-def detect_dir_from_json(json_path: Path):
-    try:
-        j = load_json(json_path)
-        return j.get("PhaseEncodingDirection", None)  # e.g., "j-" or "j"
-    except Exception:
-        return None
+def maybe_prefix_subject(filename: str, subj: str) -> str:
+    return filename if filename.startswith(f"{subj}_") else f"{subj}_{filename}"
 
-def sign_to_dir_label(phase_encoding_direction: str, default=None):
-    if phase_encoding_direction in ("j-", "i-", "k-"):
-        return "AP"
-    if phase_encoding_direction in ("j", "i", "k"):
-        return "PA"
-    return default
+def collect_inputs(inputs_root: Path):
+    dwi_dir  = inputs_root / "DWI"
+    fmap_dir = inputs_root / "FMAP"
+    t1_dir   = inputs_root / "T1w"
+    for d in [dwi_dir, fmap_dir, t1_dir]:
+        if not d.is_dir():
+            raise FileNotFoundError(f"Missing directory: {d}")
+    return dwi_dir, fmap_dir, t1_dir
 
-def detect_dir_from_name(name: str, ap_regex: str, pa_regex: str):
-    if re.search(ap_regex, name, flags=re.IGNORECASE):
-        return "AP"
-    if re.search(pa_regex, name, flags=re.IGNORECASE):
-        return "PA"
-    return None
+# ------------------------------------------------------------
+# DWI JSON editing
+# ------------------------------------------------------------
+def update_dwi_json(json_path: Path, nii_path: Path, dry_run: bool):
+    meta = load_json(json_path)
+    # (a) EstimatedTotalReadoutTime -> TotalReadoutTime
+    if "EstimatedTotalReadoutTime" in meta:
+        if "TotalReadoutTime" not in meta or not meta["TotalReadoutTime"]:
+            meta["TotalReadoutTime"] = meta["EstimatedTotalReadoutTime"]
+        del meta["EstimatedTotalReadoutTime"]
+    # (b) Infer PED if missing
+    ped_missing = ("PhaseEncodingDirection" not in meta) or not str(meta.get("PhaseEncodingDirection", "")).strip()
+    if ped_missing:
+        inferred = infer_phase_encoding_from_name(nii_path)
+        if inferred:
+            meta["PhaseEncodingDirection"] = inferred
+    if not dry_run:
+        save_json(json_path, meta)
+    print(f"[ok] Edited {json_path.name}")
 
-def max_bval_from_bval_file(bval_path: Path):
-    try:
-        txt = Path(bval_path).read_text().strip().split()
-        vals = [float(x) for x in txt if x.strip()]
-        return int(round(max(vals)))
-    except Exception:
-        return None
+# ------------------------------------------------------------
+# FMAP JSON editing (IntendedFor)
+# ------------------------------------------------------------
+def update_fmap_json(json_path: Path, intended_files: list[str], dry_run: bool):
+    meta = load_json(json_path)
+    meta["IntendedFor"] = intended_files
+    if not dry_run:
+        save_json(json_path, meta)
+    print(f"[ok] Added IntendedFor to {json_path.name}")
 
-def sanitize(s: str):
-    return re.sub(r'[^A-Za-z0-9]+', '', s)
-
-def bidsify(src_root: Path, out_root: Path, sub: str, ap_regex: str, pa_regex: str, dry: bool=False):
-    sub_dir = out_root / sub
-    dwi_dir = sub_dir / "dwi"
-    anat_dir = sub_dir / "anat"
-    ensure_dir(dwi_dir); ensure_dir(anat_dir)
-
-    # top-level metadata
-    ds_desc = {"Name": f"BIDS dataset for {sub}", "BIDSVersion": "1.9.0", "DatasetType": "raw"}
-    if not dry:
-        write_json(out_root / "dataset_description.json", ds_desc)
-        with open(out_root / "participants.tsv", "w") as f:
-            f.write("participant_id\n" + sub + "\n")
-
-    # --- T1w ---
-    t1w_root = src_root / "T1w"
-    if t1w_root.exists():
-        t1_series = sorted([p for p in t1w_root.iterdir() if p.is_dir()])
-        if t1_series:
-            t1_tmp = out_root / "_tmp_t1w"
-            ensure_dir(t1_tmp)
-            print(f"[info] Converting T1w from {t1_series[0]}")
-            if not dry:
-                run(["dcm2niix", "-ba", "y", "-z", "y", "-o", str(t1_tmp), str(t1_series[0])])
-                nii = next(iter(t1_tmp.glob("*.nii.gz")), None)
-                jpath = next(iter(t1_tmp.glob("*.json")), None)
-                shutil.move(str(nii), str(anat_dir / f"{sub}_T1w.nii.gz"))
-                if jpath:
-                    shutil.move(str(jpath), str(anat_dir / f"{sub}_T1w.json"))
-                shutil.rmtree(t1_tmp, ignore_errors=True)
-
-    # track DWIs for IntendedFor
-    dwi_relpaths = []
-
-    # --- DWI ---
-    dti_root = src_root / "DWI"
-    if dti_root.exists():
-        dti_series = sorted([p for p in dti_root.iterdir() if p.is_dir()])
-        run_idx = {}
-        for ser in dti_series:
-            tmp = out_root / f"_tmp_dwi_{sanitize(ser.name)}"
-            ensure_dir(tmp)
-            print(f"[info] Converting DWI from {ser}")
-            if not dry:
-                run(["dcm2niix", "-ba", "y", "-z", "y", "-o", str(tmp), str(ser)])
-                nii = next(iter(tmp.glob("*.nii.gz")), None)
-                bval = next(iter(tmp.glob("*.bval")), None)
-                bvec = next(iter(tmp.glob("*.bvec")), None)
-                jpath = next(iter(tmp.glob("*.json")), None)
-
-                maxb = max_bval_from_bval_file(bval) or 0
-                acq = f"b{int(round(maxb,-2))}" if maxb>0 else "b0"
-
-                ped = detect_dir_from_json(jpath)
-                dirlbl = sign_to_dir_label(ped, default=None)
-                if dirlbl is None:
-                    dirlbl = detect_dir_from_name(ser.name, ap_regex, pa_regex) or "AP"
-
-                key = (acq, dirlbl)
-                run_idx[key] = run_idx.get(key, 0) + 1
-                run_tag = f"_run-{run_idx[key]}" if run_idx[key] > 1 else ""
-
-                base = f"{sub}_acq-{acq}_dir-{dirlbl}{run_tag}_dwi"
-                shutil.move(str(nii), str(dwi_dir / f"{base}.nii.gz"))
-                shutil.move(str(bval), str(dwi_dir / f"{base}.bval"))
-                shutil.move(str(bvec), str(dwi_dir / f"{base}.bvec"))
-                shutil.move(str(jpath), str(dwi_dir / f"{base}.json"))
-
-                dwi_relpaths.append(f"dwi/{base}.nii.gz")
-                shutil.rmtree(tmp, ignore_errors=True)
-
-    # --- Fieldmaps ---
-    # fmap_root = src_root / "topup"
-    # if fmap_root.exists():
-    #     fmap_series = sorted([p for p in fmap_root.iterdir() if p.is_dir()])
-    #     for i, ser in enumerate(fmap_series, 1):
-    #         tmp = out_root / f"_tmp_fmap_{sanitize(ser.name)}"
-    #         ensure_dir(tmp)
-    #         print(f"[info] Converting topup from {ser}")
-    #         if not dry:
-    #             run(["dcm2niix", "-ba", "y", "-z", "y", "-o", str(tmp), str(ser)])
-    #             nii = next(iter(tmp.glob("*.nii.gz")), None)
-    #             jpath = next(iter(tmp.glob("*.json")), None)
-
-    #             ped = detect_dir_from_json(jpath)
-    #             dirlbl = sign_to_dir_label(ped, default=None)
-    #             if dirlbl is None:
-    #                 dirlbl = detect_dir_from_name(ser.name, ap_regex, pa_regex) or "AP"
-
-    #             base = f"{sub}_dir-{dirlbl}_run-{i}_epi"
-    #             shutil.move(str(nii), str(fmap_dir / f"{base}.nii.gz"))
-    #             j = load_json(jpath)
-    #             j["IntendedFor"] = dwi_relpaths
-    #             write_json(fmap_dir / f"{base}.json", j)
-    #             shutil.rmtree(tmp, ignore_errors=True)
-
-    # print("[ok] BIDS conversion complete at", sub_dir)
-
+# ------------------------------------------------------------
+# Main logic
+# ------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--src", required=True)
-    ap.add_argument("--out", required=True)
+    ap = argparse.ArgumentParser(description="Copy pre-made INPUTS into BIDS layout and fix DWI/FMAP JSONs.")
+    ap.add_argument("--inputs-root", required=True)
+    ap.add_argument("--bids-root", required=True)
     ap.add_argument("--sub", required=True)
-    ap.add_argument("--map-ap", default=r'app|APA|AP\b')
-    ap.add_argument("--map-pa", default=r'apa|APP|PA\b')
+    ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    bidsify(Path(args.src), Path(args.out), args.sub, args.map_ap, args.map_pa, dry=args.dry_run)
+
+    inputs_root = Path(args.inputs_root).expanduser().resolve()
+    bids_root   = Path(args.bids_root).expanduser().resolve()
+    subj        = args.sub
+    overwrite   = args.overwrite
+    dry_run     = args.dry_run
+
+    dwi_in, fmap_in, t1_in = collect_inputs(inputs_root)
+    subj_root = bids_root / subj
+    dwi_out, fmap_out, anat_out = [subj_root / s for s in ("dwi", "fmap", "anat")]
+    if not dry_run:
+        for d in [dwi_out, fmap_out, anat_out]:
+            ensure_dir(d)
+
+    # ---------- DWI ----------
+    dwi_files = []
+    for nii in sorted(dwi_in.glob("*.nii.gz")):
+        out_name = maybe_prefix_subject(nii.name, subj)
+        out_nii = dwi_out / out_name
+        stem = out_name.replace(".nii.gz", "")
+        in_stem = nii.name.replace(".nii.gz", "")
+
+        if dry_run: print(f"[dry-run] Copy {nii} -> {out_nii}")
+        else: copy_file(nii, out_nii, overwrite)
+
+        # Companions
+        for ext in (".json", ".bval", ".bvec"):
+            src = dwi_in / f"{in_stem}{ext}"
+            dst = dwi_out / f"{stem}{ext}"
+            if src.exists():
+                if dry_run: print(f"[dry-run] Copy {src} -> {dst}")
+                else: copy_file(src, dst, overwrite)
+
+        # Edit JSON
+        out_json = dwi_out / f"{stem}.json"
+        if out_json.exists():
+            update_dwi_json(out_json, out_nii, dry_run)
+        dwi_files.append(f"dwi/{out_nii.name}")
+
+    # ---------- FMAP ----------
+    for nii in sorted(fmap_in.glob("*.nii.gz")):
+        out_name = maybe_prefix_subject(nii.name, subj)
+        out_nii = fmap_out / out_name
+        if dry_run: print(f"[dry-run] Copy {nii} -> {out_nii}")
+        else: copy_file(nii, out_nii, overwrite)
+
+        in_json = nii.with_suffix("").with_suffix(".json")
+        if in_json.exists():
+            out_json = fmap_out / Path(out_name).with_suffix("").with_suffix(".json")
+            if dry_run: print(f"[dry-run] Copy {in_json} -> {out_json}")
+            else: copy_file(in_json, out_json, overwrite)
+            update_fmap_json(out_json, dwi_files, dry_run)
+
+    # ---------- T1w ----------
+    for nii in sorted(t1_in.glob("*.nii.gz")):
+        out_name = maybe_prefix_subject(nii.name, subj)
+        out_nii = anat_out / out_name
+        if dry_run: print(f"[dry-run] Copy {nii} -> {out_nii}")
+        else: copy_file(nii, out_nii, overwrite)
+
+        in_json = nii.with_suffix("").with_suffix(".json")
+        if in_json.exists():
+            out_json = anat_out / Path(out_name).with_suffix("").with_suffix(".json")
+            if dry_run: print(f"[dry-run] Copy {in_json} -> {out_json}")
+            else: copy_file(in_json, out_json, overwrite)
+
+    print("[done] All files copied and JSONs updated.")
 
 if __name__ == "__main__":
     main()
